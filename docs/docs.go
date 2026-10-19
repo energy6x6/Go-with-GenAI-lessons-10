@@ -269,6 +269,12 @@ const docTemplate = `{
                 "summary": "List books with authors and categories, ordered by ID",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Title or ISBN search",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Category ID",
                         "name": "category_id",
@@ -1633,12 +1639,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "3.0",
+	Version:          "4.0",
 	Host:             "",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "LibraTrack Library API",
-	Description:      "Lesson 9: bcrypt, HS256 JWT, RBAC, users and loans.",
+	Description:      "Lesson 10: HTML templates, HTMX, cookie authentication and embedded assets.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -1,42 +1,40 @@
-Lesson 9 local verification — 2026-10-15
-Source: completed Lesson 8 commit d27b5b7
-Platform: macOS amd64; PostgreSQL 16 in a separate Lesson 9 Docker volume.
+LibraTrack — Lesson 10 local verification
+Checked: 2026-10-19T18:09:30+03:00
+Base: Lesson 9 commit ea8ccb6; Lesson 10 develop builds on this baseline.
 go version go1.27.2 darwin/amd64
 
-PASS go build ./...
-PASS go vet ./...
-PASS go test -v ./...
-PASS go test -race -count=1 -coverpkg=./... -covermode=atomic -coverprofile=cover.out -json ./...
-Top-level tests: PASS=71 FAIL=0 SKIP=0
-All test cases:  PASS=148 FAIL=0 SKIP=0
-Packages:       PASS=13 FAIL=0 SKIP=0
-Total statement coverage including cross-package integration calls: 71.6%
+PASS: go mod tidy
+PASS: go build ./...
+PASS: go vet ./...
+PASS: gofmt (cmd, internal, docs, web, migrations)
+PASS: go test -race -count=1 -json ./...
+Top-level tests: PASS=80 FAIL=0 SKIP=0
+All test cases: PASS=182 FAIL=0 SKIP=0
+8 packages with passing tests; 9 packages have no test files.
 
-Migration round trips, inherited normalization/N+1, concurrent loans/registration,
-real auth/RBAC, ownership, invalid tokens, DTOs, logger and CORS are included above.
+PASS: full catalog HTML and isolated HTMX row fragments
+PASS: real PostgreSQL book CRUD, validation and literal search
+PASS: librarian/admin deletion returns empty 200; guest/reader writes return 403
+PASS: shared credentials, registration role boundary, login/logout cookies
+PASS: HttpOnly, configurable Secure, SameSite, signed session-bound CSRF
+PASS: XSS payloads rendered as escaped text; role-change invalidation
+PASS: books List with availability: 4 SELECTs for 10 and 15 books
+PASS: embedded migrations down/up from an empty working directory
+PASS: native binary launched in /tmp/verify-libratrack-8jisudph; directory contains only libratrack
+PASS: Linux/amd64 CGO_ENABLED=0 binary in scratch, read-only root, non-root, no mounts
+PASS: /catalog, CSS, local HTMX, app.js, /web/books?q=Go in both isolation environments
+PASS: served static files match source bytes
+PASS: browser catalog rendering and live Go search without document reload
 
-PASS docker compose config -q
-PASS /health -> 200
-PASS /swagger/index.html -> 200
-PASS /swagger/doc.json -> 200
-PASS Swagger declares Bearer auth on protected operations
-PASS /api/v1/books -> 200
-PASS fresh Lesson 9 seed contains 10 books
-PASS /api/v1/me/loans -> 401
-PASS /api/v1/users -> 401
+Manual Task 1.1 audit: personally confirmed by the student on 2026-10-19;
+all HTML templates and Go renderers reviewed, html/template and absence of
+inappropriate template.HTML verified; no findings reported.
+Student screenshots: captured on 2026-10-19 for CRUD, HTMX, XSS and isolation.
+Evidence report: prepared locally using four original student screenshots.
+Student isolation rerun: current evidence/isolation.json records the native
+directory /tmp/verify-libratrack-5drz_i8h and successful native/container checks.
+PostgreSQL and secret environment configuration remain external.
 
-Dependency scan (govulncheck v1.9.0):
-=== Symbol Results ===
-
-No vulnerabilities found.
-
-Your code is affected by 0 vulnerabilities.
-This scan also found 0 vulnerabilities in packages you import and 1
-vulnerability in modules you require, but your code doesn't appear to call these
-vulnerabilities.
-Use '-show verbose' for more details.
-
-Module-only advisory: GO-2026-5932, golang.org/x/crypto/openpgp, not imported.
-Student screenshots and personal manual review are not included in this result.
-GitHub CI status is verified separately after publication; local results alone
-must not be presented as successful GitHub CI or a completed LMS submission.
+Binary SHA-256:
+libratrack: e8c197e9919b715485e96f0a6c593312712ed4aa4bfaa3f205deffe36d7bb889
+libratrack-linux: 4e374edf7d00cdfda0a0e30bc1f2604f4c3957c24e62a19980323a60db69d532

@@ -1,4 +1,4 @@
-name: Lesson 9 security check
+name: Lesson 10 full-stack check
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: lesson9-${{ github.ref }}
+  group: lesson10-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,8 +31,8 @@ jobs:
           --health-retries 10
     env:
       PGPASSWORD: ci-bootstrap-only
-      DATABASE_URL: postgres://libratrack:ci-app-only@localhost:5432/libratrack9?sslmode=disable
-      TEST_DATABASE_URL: postgres://libratrack:ci-app-only@localhost:5432/libratrack9_test?sslmode=disable
+      DATABASE_URL: postgres://libratrack:ci-app-only@localhost:5432/libratrack10?sslmode=disable
+      TEST_DATABASE_URL: postgres://libratrack:ci-app-only@localhost:5432/libratrack10_test?sslmode=disable
       JWT_SECRET: ci-ephemeral-signing-secret-not-for-deployment
       POSTGRES_PASSWORD: ci-compose-validation-only
       APP_DB_PASSWORD: ci-compose-validation-only
@@ -45,12 +45,12 @@ jobs:
         run: |
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE libratrack LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD 'ci-app-only';
-          CREATE DATABASE libratrack9 OWNER libratrack;
-          CREATE DATABASE libratrack9_test OWNER libratrack;
+          CREATE DATABASE libratrack10 OWNER libratrack;
+          CREATE DATABASE libratrack10_test OWNER libratrack;
           SQL
       - name: Static validation
         run: |
-          test -z "$(gofmt -l cmd internal docs)"
+          test -z "$(gofmt -l cmd internal docs web migrations)"
           go mod tidy
           git diff --exit-code go.mod go.sum
           go vet ./...
@@ -59,8 +59,8 @@ jobs:
           test -f migrations/000003_add_auth_fields.up.sql
           test -f migrations/000003_add_auth_fields.down.sql
           test -f prompts.txt
-          test -f security_audit.md
-          test -f security_design.txt
+          test -f design_v10.txt
+          test -f internal/handler/web/catalog_test.go
           test -f internal/integration/auth_test.go
           test -f internal/integration/rbac_test.go
           test -z "$(git ls-files .env)"
@@ -77,7 +77,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lesson9-test-results
+          name: lesson10-test-results
           path: |
             test-results.jsonl
             test-summary.txt

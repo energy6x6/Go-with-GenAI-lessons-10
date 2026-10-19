@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,8 +18,8 @@ import (
 )
 
 // @title LibraTrack Library API
-// @version 3.0
-// @description Lesson 9: bcrypt, HS256 JWT, RBAC, users and loans.
+// @version 4.0
+// @description Lesson 10: HTML templates, HTMX, cookie authentication and embedded assets.
 // @BasePath /api/v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -49,9 +50,9 @@ func main() {
 	}
 	router, err := app.NewRouter(repository.NewRepositories(db), tokens)
 	if err != nil {
-		log.Fatal("cannot initialize authentication")
+		log.Fatalf("cannot initialize application: %v", err)
 	}
-	server := &http.Server{Addr: "127.0.0.1:" + c.Port, Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: net.JoinHostPort(c.ListenHost, c.Port), Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -62,7 +63,7 @@ func main() {
 			log.Printf("shutdown failed (%T)", err)
 		}
 	}()
-	log.Printf("listening on http://localhost:%s; Swagger: /swagger/index.html", c.Port)
+	log.Printf("listening on http://localhost:%s/catalog; Swagger: /swagger/index.html", c.Port)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal("HTTP server failed")
 	}

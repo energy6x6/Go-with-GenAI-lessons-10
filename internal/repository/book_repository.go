@@ -6,8 +6,10 @@ import (
 )
 
 type BookFilter struct {
-	CategoryID  uint
-	Page, Limit uint64
+	Search              string
+	IncludeAvailability bool
+	CategoryID          uint
+	Page, Limit         uint64
 }
 type BookRepository interface {
 	Create(context.Context, model.BookInput) (model.Book, error)

@@ -7,6 +7,7 @@ import (
 	_ "libratrack/docs"
 	"libratrack/internal/auth"
 	"libratrack/internal/handler"
+	webhandler "libratrack/internal/handler/web"
 	"libratrack/internal/middleware"
 	"libratrack/internal/model"
 	"libratrack/internal/repository"
@@ -61,6 +62,13 @@ func NewRouter(repos repository.Repositories, tokens *auth.Tokens) (http.Handler
 	admin.GET("/users", users.List)
 	admin.PUT("/users/:id/role", users.SetRole)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	web, err := webhandler.New(repos, tokens)
+	if err != nil {
+		return nil, err
+	}
+	if err := web.Register(r); err != nil {
+		return nil, err
+	}
 	r.NoRoute(func(c *gin.Context) { handler.Error(c, 404, "not_found", "Route not found") })
 	r.NoMethod(func(c *gin.Context) { handler.Error(c, 405, "method_not_allowed", "Method not allowed") })
 	return r, nil

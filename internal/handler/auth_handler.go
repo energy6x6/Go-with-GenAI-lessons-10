@@ -10,17 +10,17 @@ import (
 )
 
 type AuthHandler struct {
-	users     repository.UserRepository
-	tokens    *auth.Tokens
-	dummyHash string
+	users       repository.UserRepository
+	tokens      *auth.Tokens
+	credentials *auth.Credentials
 }
 
 func NewAuthHandler(users repository.UserRepository, tokens *auth.Tokens) (*AuthHandler, error) {
-	dummy, err := auth.HashPassword("dummy-password-for-absent-accounts")
+	credentials, err := auth.NewCredentials(users)
 	if err != nil {
 		return nil, err
 	}
-	return &AuthHandler{users: users, tokens: tokens, dummyHash: dummy}, nil
+	return &AuthHandler{users: users, tokens: tokens, credentials: credentials}, nil
 }
 
 // Register godoc
@@ -72,18 +72,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.users.FindByEmail(c.Request.Context(), in.Email)
-	if err != nil && !errors.Is(err, repository.ErrNotFound) {
-		repositoryError(c, err)
-		return
-	}
-	hash := user.PasswordHash
-	if err != nil || hash == "" {
-		hash = h.dummyHash
-	}
-	passwordErr := auth.CheckPassword(hash, in.Password)
-	if err != nil || user.PasswordHash == "" || passwordErr != nil {
-		Error(c, 401, "UNAUTHENTICATED", "invalid credentials")
+	user, err := h.credentials.Verify(c.Request.Context(), in.Email, in.Password)
+	if err != nil {
+		if errors.Is(err, auth.ErrCredentials) {
+			Error(c, 401, "UNAUTHENTICATED", "invalid credentials")
+		} else {
+			repositoryError(c, err)
+		}
 		return
 	}
 	token, err := h.tokens.Issue(user.ID, user.Role)

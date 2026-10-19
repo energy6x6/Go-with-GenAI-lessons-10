@@ -12,3 +12,7 @@ headers.txt
 backups/
 test-results.jsonl
 test-summary.txt
+
+.demo-accounts.txt
+.demo-*.json
+__pycache__/

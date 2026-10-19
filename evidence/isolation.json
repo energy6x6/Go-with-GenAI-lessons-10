@@ -1,0 +1,67 @@
+{
+  "native_directory": "/tmp/verify-libratrack-5drz_i8h",
+  "native_files": [
+    "libratrack"
+  ],
+  "native": {
+    "/catalog": {
+      "status": 200,
+      "bytes": 7411,
+      "sha256": "419be30750b081a7d44b2febcbdc914373e5d796d6ce110c8fd497e64756b120"
+    },
+    "/static/css/style.css": {
+      "status": 200,
+      "bytes": 5306,
+      "sha256": "7d737de715118a4705bedd66bdc98b99512bc0cbf2a5b794ae559d04c765984f"
+    },
+    "/static/js/htmx.min.js": {
+      "status": 200,
+      "bytes": 51238,
+      "sha256": "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de"
+    },
+    "/static/js/app.js": {
+      "status": 200,
+      "bytes": 536,
+      "sha256": "49be25d57ab79e2bb48dd9af969fa3d56b7e8332d436a246ee72fd277fd1cf8d"
+    },
+    "/web/books?q=Go": {
+      "status": 200,
+      "bytes": 1202,
+      "sha256": "f370340ca10df7d9168f17db69194a391c6cf59ac339960d78e23ecedde9029c"
+    }
+  },
+  "container": {
+    "image": "libratrack10-isolated:local",
+    "mounts": [],
+    "read_only": true,
+    "non_root": "65532:65532",
+    "checks": {
+      "/catalog": {
+        "status": 200,
+        "bytes": 7411,
+        "sha256": "a11cc66735bbeaa2bf2165cac3a7b12dfba5f319069fde8bbeb9c3dadb711dd5"
+      },
+      "/static/css/style.css": {
+        "status": 200,
+        "bytes": 5306,
+        "sha256": "7d737de715118a4705bedd66bdc98b99512bc0cbf2a5b794ae559d04c765984f"
+      },
+      "/static/js/htmx.min.js": {
+        "status": 200,
+        "bytes": 51238,
+        "sha256": "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de"
+      },
+      "/static/js/app.js": {
+        "status": 200,
+        "bytes": 536,
+        "sha256": "49be25d57ab79e2bb48dd9af969fa3d56b7e8332d436a246ee72fd277fd1cf8d"
+      },
+      "/web/books?q=Go": {
+        "status": 200,
+        "bytes": 1202,
+        "sha256": "f370340ca10df7d9168f17db69194a391c6cf59ac339960d78e23ecedde9029c"
+      }
+    }
+  },
+  "note": "PostgreSQL and secret environment configuration remain external. No UI or SQL files are mounted."
+}
