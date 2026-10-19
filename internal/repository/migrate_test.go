@@ -94,3 +94,31 @@ func TestConcurrentDuplicateCreateIsAtomic(t *testing.T) {
 		t.Fatal("partial or duplicate author links", count)
 	}
 }
+
+func TestEmbeddedMigrationsFromEmptyWorkingDirectory(t *testing.T) {
+	db := testutil.Database(t)
+	dsn := db.Dialector.(*postgres.Dialector).Config.DSN
+	t.Chdir(t.TempDir())
+	m, err := repository.Migration(dsn, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	if err := m.Down(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Up(); err != nil {
+		t.Fatal(err)
+	}
+	version, dirty, err := m.Version()
+	if err != nil || dirty || version != 5 {
+		t.Fatalf("version=%d dirty=%t err=%v", version, dirty, err)
+	}
+	var count int64
+	if err := db.Model(&model.Book{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 10 {
+		t.Fatalf("embedded seed contains %d books", count)
+	}
+}

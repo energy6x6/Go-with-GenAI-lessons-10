@@ -118,6 +118,7 @@ func (h *BookHandler) Delete(c *gin.Context) {
 // @Summary List books with authors and categories, ordered by ID
 // @Tags books
 // @Produce json
+// @Param q query string false "Title or ISBN search"
 // @Param category_id query int false "Category ID"
 // @Param page query int false "Page" default(1) minimum(1)
 // @Param limit query int false "Page size, capped at 100" default(10) minimum(1)
@@ -146,7 +147,7 @@ func (h *BookHandler) List(c *gin.Context) {
 		}
 		categoryID = uint(n)
 	}
-	books, err := h.repo.List(c.Request.Context(), repository.BookFilter{CategoryID: categoryID, Page: page, Limit: limit})
+	books, err := h.repo.List(c.Request.Context(), repository.BookFilter{Search: c.Query("q"), CategoryID: categoryID, Page: page, Limit: limit})
 	if err != nil {
 		repositoryError(c, err)
 		return

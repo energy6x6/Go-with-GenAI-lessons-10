@@ -1,73 +1,46 @@
-Lesson 9 — implementation specifications and review prompts
-Prompts for an AI assistant covering authentication, authorization, security
-review and integration tests.
+LibraTrack — Lesson 10 prompt log
 
-Task 2.1 — Authentication and migration
-Extend the completed Go/Gin/PostgreSQL LibraTrack Lesson 8 application.
-Keep normalized books/authors/categories/copies, versioned SQL and existing layers.
-In this new Lesson 9 database, retain migrations 000001 and 000002, create
-000003_add_auth_fields.up.sql/down.sql, move the demo seed to 000004, and add
-000005_loans. Do not migrate or modify the Lesson 8 database. Role already exists:
-retain it and its reader/librarian/admin constraint; never drop it in auth rollback.
-Add password_hash and a case-insensitive unique email index. Legacy seeded accounts
-have no usable password. Do not store or publish default staff credentials.
-Put reusable bcrypt and JWT code in internal/auth and HTTP code in internal/handler.
-RegisterRequest contains email, password and optional name; UpdateProfileRequest
-contains only the editable display name. Never bind request JSON directly to User.
-Reject unknown fields and enforce bcrypt's 72-byte maximum. Hash with
-bcrypt.GenerateFromPassword and bcrypt.DefaultCost (10), always assigning reader.
-Annotate User.PasswordHash with json:"-" and exclude it from user-list SELECTs.
-Login uses bcrypt.CompareHashAndPassword. Unknown email and wrong password must
-return the same HTTP 401 envelope and "invalid credentials" message. Compare a
-precomputed dummy bcrypt hash for absent/legacy accounts. Never log request bodies,
-credentials, Authorization headers or token responses.
-Issue JWT with jwt.SigningMethodHS256 and user_id, role, exp (24 hours).
-Load the signing secret from os.Getenv("JWT_SECRET"); reject missing/short secrets
-at startup without a fallback. Pin HS256 and require expiration during parsing.
-Provide a local database-authorized command for the first administrator.
+Task 2.1 — Layout, catalog and book row
+Create Ukrainian html/template views for the existing Gin/PostgreSQL LibraTrack
+application. Use web/templates/layout.html with {{block "content" .}}, named nav
+and book_row partials, and separate page template sets so content definitions do
+not override each other. Render the catalog as a semantic table with title, ISBN,
+authors, category, available/total copies, detail links and staff-only actions.
+Use <tbody id="book-list"> as the fragment target. Add a labeled search form,
+category filter, empty state and ordinary forms for creating/editing/deleting
+books. Keep inputs escaped; do not use template.HTML for data. Provide login,
+reader registration, validation feedback, responsive local CSS and accessible
+labels. Use typed page/form data. Preserve the existing repository interfaces
+and API behavior; no browser framework or CDN dependency.
 
-Task 2.2 — Authentication/RBAC middleware and route registration
-Implement internal/middleware/auth.go and rbac.go. AuthMiddleware reads
-Authorization: Bearer <token>, validates signature, algorithm, exp, positive typed
-user_id and a known role. Confirm the user still exists and the database role
-matches the signed role; role changes invalidate earlier tokens. Set Gin context
-keys user_id and role. Abort denied requests with c.AbortWithStatusJSON.
-RequireRole(allowed ...string) reads c.Get("role"), returns 401 if unauthenticated,
-403 FORBIDDEN if the role is not allowed, and calls the next handler only on success.
-Keep route registration in the inherited internal/app.NewRouter, called by
-cmd/api/main.go. Use public and protected groups at /api/v1; nest staff and admin
-as siblings under protected so AuthMiddleware always executes before RequireRole.
-Public: register/login, catalog and existing catalog-related GET endpoints.
-Protected: GET /me/loans and PUT /me/profile, using the verified user ID only.
-Staff (librarian/admin): book POST/PUT/DELETE, author/category/copy creation,
-POST /loans and POST /loans/:id/return.
-Admin: GET /users and PUT /users/:id/role.
-Keep the existing error envelope. Limit login/register attempts per actual client
-IP, do not trust arbitrary forwarded headers, and allow only the configured CORS
-origin with Authorization in preflight. Swagger must document Bearer auth.
+Task 2.2 — Live search, deletion and web handlers
+Add handlers in internal/handler/web and register them through internal/app,
+called from cmd/api. GET /catalog renders a full layout. GET /web/books?q=Go
+renders only book_row fragments. Use hx-get="/web/books",
+hx-trigger="keyup changed delay:300ms", hx-target="#book-list", and include
+category filters. Cancel obsolete search requests. For staff deletion use
+hx-delete="/web/books/{{.Book.ID}}", hx-target="closest tr",
+hx-swap="outerHTML", hx-confirm="Delete this book?". Return an empty 200 only
+when repository deletion succeeds. Render errors into a feedback area without
+removing the row. Enforce librarian/admin authorization on the server; guest and
+reader deletion attempts return 403. Browser JWTs use HttpOnly cookies with
+SameSite and configurable Secure; use CSRF tokens bound to the session for forms
+and HTMX writes. Share credential validation with the existing Bearer API.
 
-Task 3.1 — Review
-Review this Go/Gin API code for security vulnerabilities. Check specifically for:
-1) SQL injection (raw queries, string concatenation); 2) Mass assignment (binding
-request JSON directly to DB models); 3) Missing authentication or RBAC checks;
-4) Sensitive data exposure (leaking password hashes in JSON responses).
-Output a structured list with line numbers, severity (Low/Medium/High), and
-proposed fixes. Do not rewrite files completely.
-Inspect internal/auth, middleware, handlers, repositories, route registration,
-SQL migrations and dependencies. Distinguish inherited issues, current findings,
-false positives and explicitly deferred work. Do not invent five vulnerabilities
-or mark a test/documentation gap as an exploitable security defect.
+Task 3.1 — Embedded runtime resources
+Add web/templates.go and web/static.go. Embed templates and static assets,
+parse templates with html/template.ParseFS, use fs.Sub for /static/, and ship
+htmx.min.js locally. Embed versioned SQL migrations because cmd/api applies them
+on startup. Keep secrets in environment variables. Verify both a native binary
+in an otherwise empty directory and a CGO_ENABLED=0 Linux binary in scratch,
+without source mounts or external template/static/migration files.
 
-Task 3.2 — Integration tests
-Adapt scenarios from the supplied auth_test.go and rbac_test.go examples to the
-actual application, not mock authentication or mock business handlers.
-Use table-driven httptest tests and real PostgreSQL in isolated test schemas.
-Cover duplicate email 422, valid login 200 with a verifiable JWT and 24-hour TTL,
-wrong/unknown credentials 401 with identical errors, missing/expired/forged/unsigned/
-wrong-algorithm/no-exp tokens 401, reader book creation 403 and librarian/admin
-book creation 201. Exercise all inherited write endpoints, user/role administration,
-profile mass assignment, password/hash leakage, role-change invalidation, own-loan
-filtering, double borrowing, returns and concurrent registration/borrowing.
-Assert rejected requests never execute their handlers. Run go test -v ./... and
-race tests, build, vet, go mod tidy, SQL up/down/up and govulncheck. Missing database
-configuration must not be reported as a complete successful integration run.
+Task 3.2 — Verification
+Write table-driven httptest/PostgreSQL tests in
+internal/handler/web/catalog_test.go against the real application router.
+Cover full catalog markup; search fragments without a layout; availability;
+CRUD and preserved validation input; empty 200 deletion; guest/reader 403;
+login/logout/registration; HttpOnly/Secure/SameSite cookies; session-bound CSRF;
+XSS escaping; literal search characters; role changes and constant query count.
+Keep inherited API and migration tests. Report actual results and distinguish
+automated verification from the student's pending manual audit and screenshots.

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -123,8 +124,15 @@ func (r *gormBookRepository) List(ctx context.Context, f BookFilter) ([]model.Bo
 		return books, nil
 	}
 	q := r.db.WithContext(ctx).Order("books.id ASC").Limit(int(f.Limit)).Offset(int((f.Page - 1) * f.Limit))
+	if f.IncludeAvailability {
+		q = q.Select("books.*, COALESCE(stock.available_copies, 0) AS available_copies, COALESCE(stock.total_copies, 0) AS total_copies").Joins(`LEFT JOIN (SELECT book_id, COUNT(*) AS total_copies, COUNT(*) FILTER (WHERE status = 'available') AS available_copies FROM copies GROUP BY book_id) AS stock ON stock.book_id = books.id`)
+	}
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(f.Search)
+		q = q.Where("books.title ILIKE ? OR books.isbn ILIKE ?", "%"+escaped+"%", "%"+escaped+"%")
+	}
 	if f.CategoryID != 0 {
-		q = q.Where("category_id = ?", f.CategoryID)
+		q = q.Where("books.category_id = ?", f.CategoryID)
 	}
 	if err := q.Preload("Authors").Preload("Category").Find(&books).Error; err != nil {
 		return nil, translate(err)

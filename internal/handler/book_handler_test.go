@@ -34,7 +34,7 @@ func checkStatus(t *testing.T, r *httptest.ResponseRecorder, want int) {
 func router(t *testing.T) http.Handler {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	t.Setenv("JWT_SECRET", "lesson9-tests-only-secret-32-bytes-long")
+	t.Setenv("JWT_SECRET", "lesson10-tests-only-secret-32-bytes-long")
 	t.Setenv("ALLOWED_ORIGIN", "http://example.com")
 	db := testutil.Database(t)
 	user := model.User{Email: "regression-admin@example.com", Role: model.RoleAdmin}

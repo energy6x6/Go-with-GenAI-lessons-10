@@ -1,200 +1,198 @@
 # 📚 LibraTrack — Система обліку бібліотеки / Library Management System
 
-Проєкт курсу **Go with GenAI**, Lesson 9 **Security First**. Продовження завершеного
-Lesson 8: Gin REST API, PostgreSQL 16, GORM, нормалізований каталог, Swagger.
-Додано bcrypt, JWT, middleware RBAC, керування ролями та облік видач.
-База перенесення: Lesson 8, commit `d27b5b7`.
+**Go with GenAI, Lesson 10 — Full Stack.** Вебзастосунок на Go, Gin,
+`html/template` і HTMX із PostgreSQL та GORM. База: Lesson 9, commit `ea8ccb6`.
+Збережено REST API, Swagger, bcrypt/JWT, RBAC і транзакційний облік видач.
+Додано каталог, браузерний вхід, CRUD книг, живий пошук і вбудовані ресурси.
 
 ## 🛠️ Швидкий запуск
 
-Потрібні Go **1.27.2** (або автоматичне завантаження toolchain через Go), Docker
-Desktop із Compose v2 та Python 3. Порти: API `8080`, PostgreSQL `5439`.
+Потрібні Go **1.27.2**, Docker Desktop із Compose v2 та Python 3.
+З кореня проєкту:
 
 ```bash
-git clone --branch develop https://github.com/energy6x6/Go-with-GenAI-lessons-9.git
-cd Go-with-GenAI-lessons-9
 python3 scripts/setup_env.py
-docker compose up --wait postgres
+docker compose up -d --wait postgres
+go run ./cmd/demo-users
 go run ./cmd/api
 ```
 
-API: <http://localhost:8080/api/v1/books>.
-Swagger: <http://localhost:8080/swagger/index.html>.
-Health: <http://localhost:8080/health>.
+- Каталог: <http://localhost:8085/catalog>.
+- Swagger: <http://localhost:8085/swagger/index.html>.
+- JSON API: <http://localhost:8085/api/v1/books>.
+- PostgreSQL: `127.0.0.1:5440`; окремий volume та бази `libratrack10`,
+  `libratrack10_test`, `libratrack10_migr`.
 
-Setup генерує два різні паролі PostgreSQL і випадковий JWT-секрет у `.env` із
-правами `0600`, не виводячи їх. Наявний `.env` зберігається. Не копіюйте `.env`
-Lesson 8: Lesson 9 має власний volume, порт і бази `libratrack9`,
-`libratrack9_test`, `libratrack9_migr`. Зміна init-скрипта не переініціалізує volume.
+Setup створює випадкові секрети в ігнорованому `.env` із правами `0600`.
+`demo-users` створює читача, бібліотекаря й адміністратора та зберігає їхні
+випадкові паролі у приватному `.demo-accounts.txt` (`0600`, поза Git).
+Повторний запуск зберігає наявний файл і паролі. Реєстрація через браузер
+створює лише `reader`; роль із запиту користувача не приймається.
 
-Змінні середовища мають пріоритет над `.env`. `JWT_SECRET` обов'язковий, мінімум
-32 байти, без fallback. Решта конфігурації описана в `.env.example`.
-API слухає loopback для локальної роботи. Для публічного розгортання потрібні
-HTTPS і налаштований reverse proxy; bcrypt/JWT не шифрують HTTP-трафік.
+Наявні `.env`, бази та volumes попередніх уроків не використовуються.
+Сервер за замовчуванням слухає loopback. Для контейнера задайте
+`LISTEN_HOST=0.0.0.0`. Для HTTPS задайте `COOKIE_SECURE=true`.
+Змінні середовища мають пріоритет над `.env`; JWT-секрет обов’язковий.
 
-## 📈 Lesson 9 Report — Автентифікація та авторизація
+## 📈 Lesson 10 Report — Вебшар, HTMX і єдиний бінарник
 
-### 1. Проєктування й промпти
+### 1. Архітектура та шаблони
 
-[security_design.txt](security_design.txt) містить матрицю всіх маршрутів, DTO,
-межі довіри, правила видачі, конфігурацію й список ручної перевірки.
-[prompts.txt](prompts.txt) містить специфікації Tasks 2.1/2.2 та промпти аудиту й
-тестування, підготовлені за допомогою AI-асистента.
-
-SHA-256 використовується для задач цілісності, bcrypt — для паролів, JWT — для
-перевірки підписаної особи. Навчальний HTTP `/hash` і tcpdump-приклад не додаються
-до бібліотечного API. Джерело практикуму:
-[Hashing workshop](https://killercoda.com/mentorchita/course/crypto/study00).
-
-### 2. Міграції та схема
-
-| Версія | Призначення |
-|---|---|
-| `000001_init_schema` | Початкова плоска схема Lesson 8 |
-| `000002_normalize_books` | Нормалізація, authors/categories/copies/users; збережено |
-| `000003_add_auth_fields` | Password hash і унікальність email без урахування регістру |
-| `000004_seed_demo_data` | Демонстраційні дані Lesson 8 |
-| `000005_loans` | Видачі, зовнішні ключі, обмеження та індекси |
-
-Номер seed змінено **лише в новому Lesson 9**, щоб зберегти вимагану домашнім
-завданням назву `000003_add_auth_fields`. Потрібна нова база; цей ланцюжок не
-можна застосовувати поверх БД Lesson 8 із уже виконаною версією 3.
-`role` вже створено міграцією 2: auth-міграція зберігає поле й його CHECK,
-а її rollback не видаляє успадковану роль. Демонстраційний читач не має придатного
-пароля для входу; нові користувачі реєструються через API. AutoMigrate не використовується.
-
-```mermaid
-erDiagram
-    CATEGORIES ||--o{ BOOKS : classifies
-    AUTHORS ||--o{ BOOK_AUTHORS : writes
-    BOOKS ||--|{ BOOK_AUTHORS : has
-    BOOKS ||--o{ COPIES : contains
-    USERS ||--o{ LOANS : borrows
-    COPIES ||--o{ LOANS : history
+```text
+cmd/api/main.go                 запуск сервера
+internal/app/app.go             реєстрація API та вебмаршрутів
+internal/auth/credentials.go    спільна перевірка email/password
+internal/handler/web/           HTML-обробники, cookies, CSRF, інтеграційні тести
+internal/repository/            PostgreSQL/GORM, пошук і підрахунок примірників
+web/templates.go               ParseFS і окремий набір шаблонів на сторінку
+web/static.go                  embed.FS, fs.Sub і роздача локальних ресурсів
+web/templates/                 layout, pages, partials
+web/static/                    CSS, HTMX і невеликий скрипт обробки помилок
+migrations/embed.go            вбудовані versioned SQL-міграції
 ```
 
-Видача триває 14 днів; оформлення та повернення — операції персоналу.
-Транзакції, блокування рядків і partial unique index гарантують одну активну
-видачу на примірник. Історія видач захищена FK `ON DELETE RESTRICT`.
-Штрафи не входять до цієї реалізації домашнього завдання.
+HTML і JSON використовують спільні репозиторії та перевірку облікових даних.
+Назви книг, описи й інші дані екрануються через `html/template`.
+Набори layout/partials/page розбираються один раз на старті. Рендеринг
+буферизований: помилка шаблону не надсилає частково успішну сторінку.
+Автори й категорії завантажуються через Preload; доступність агрегується в
+основному SQL-запиті. Для запиту даних книг перевірено незмінні **4 SELECT** для 10 і 15 книг;
+повна сторінка додатково завантажує категорії та, за наявності сесії, користувача.
 
-### 3. Матриця доступу
+Збережено міграції 1–5: початкова схема → нормалізація → auth fields →
+демонстраційні дані → видачі. Нова SQL-міграція для вебшару не потрібна.
 
-У таблиці шляхи мають префікс `/api/v1`.
+### 2. Можливості й доступ
 
-| Рівень | Маршрути |
+| Маршрут | Поведінка / доступ |
 |---|---|
-| Public | `POST /auth/register`, `POST /auth/login`; усі GET каталогу: books/authors/categories/copies/availability |
-| Authenticated | `GET /me/loans`, `PUT /me/profile` |
-| librarian / admin | `POST /books`, `PUT /books/:id`, `DELETE /books/:id`, створення authors/categories/copies, `POST /loans`, `POST /loans/:id/return` |
-| admin | `GET /users`, `PUT /users/:id/role` |
+| `GET /catalog` | Публічний каталог, фільтр категорії, пошук, до 20 книг на сторінку |
+| `GET /books/:id` | Книга, автори, опис і наявність примірників |
+| `GET /web/books?q=Go` | Лише HTML-рядки таблиці для живого пошуку |
+| `GET /books/new`, `/books/:id/edit` | Форми для librarian/admin |
+| `POST /web/books`, `/web/books/:id` | Створення/редагування, валідація, redirect після успіху |
+| `DELETE /web/books/:id` | HTMX-видалення для librarian/admin; порожня `200 OK` |
+| `GET /books/:id/delete`, `POST /web/books/:id/delete` | Підтвердження й видалення звичайною формою, зокрема без JS |
+| `GET/POST /login`, `/register` | Браузерний вхід і реєстрація читача |
+| `POST /logout` | Очищення cookies |
 
-`/health` і `/swagger/*` публічні. Реєстрація маршрутів лишається в успадкованому
-`internal/app.NewRouter`, який викликає `cmd/api/main.go`. `staff` і `admin` —
-сусідні вкладені групи `protected`: спочатку AuthMiddleware, потім RequireRole.
-401 означає відсутню/невалідну особу; 403 — роль без потрібного дозволу.
-Відмови зупиняють Gin handler chain через `AbortWithStatusJSON`.
+Пошук використовує `hx-get`, затримку `300ms`, `hx-target="#book-list"` і
+скасування попереднього запиту. Параметризований SQL шукає назву або ISBN;
+`%` і `_` у введенні трактуються буквально. Для повної пагінації результатів
+є звичайна кнопка «Пошук». Видалення використовує `closest tr`, `outerHTML`
+і підтвердження. За помилки рядок зберігається, повідомлення показується окремо.
+Книгу з історією видач захищають зовнішні ключі.
 
-Реєстрація завжди створює `reader`. Для початкового адміністратора спочатку
-зареєструйте обліковий запис через API, потім локально виконайте:
+### 3. Безпека та ручна частина
+
+Браузерний JWT зберігається у cookie з `HttpOnly`, `SameSite=Lax`, `Path=/` і
+строком 24 години. `Secure` вмикається для HTTPS. `localStorage` не
+використовується: JavaScript, зокрема XSS, може прочитати з нього токен.
+HttpOnly обмежує читання cookie, проте не замінює захисту від XSS та CSRF.
+
+Усі вебоперації зміни, включно з login/logout/register, перевіряють CSRF-токен
+із підписаним випадковим nonce, прив’язаний до JWT-сесії. Поточна роль
+перевіряється в БД. Гість і reader отримують 403 на керованих вебмаршрутах;
+API зберігає розрізнення 401/403. Logout очищує cookies, але не відкликає
+раніше скопійований JWT. Сувора CSP дозволяє ресурси лише цього сервера.
+
+[design_v10.txt](design_v10.txt) описує рішення та результати автоматичного
+аудиту. **19.10.2026 студент особисто підтвердив ручний аудит Task 1.1:**
+переглянуто всі HTML-шаблони й Go-рендерери, використання `html/template`
+та відсутність небезпечних перетворень у `template.HTML`; зауважень немає.
+Студент зробив власні скриншоти CRUD, HTMX, XSS-перевірки й тестів ізоляції.
+[prompts.txt](prompts.txt)
+містить специфікації Tasks 2.1–2.2 та інтеграції/перевірок.
+
+### 4. Один бінарник і перевірка незалежності
 
 ```bash
-go run ./cmd/set-role -email admin9@example.com -role admin
+CGO_ENABLED=0 go build -o bin/libratrack ./cmd/api
+python3 scripts/verify_isolation.py --keep-container
 ```
 
-Команда потребує локальних DB credentials і не є HTTP endpoint. Після зміни ролі
-потрібно увійти знову. Далі адміністратор може змінювати ролі через API.
+Скрипт окремо збирає native і Linux/amd64 бінарники. Native перевіряється
+в тимчасовій теці лише з виконуваним файлом. Linux працює в `scratch` як
+non-root, з read-only filesystem і без mounts. Перевіряються `/catalog`,
+CSS, локальний HTMX, app.js та пошуковий HTML-фрагмент; статика зіставляється
+побайтово. Фактичний звіт: [evidence/isolation.json](evidence/isolation.json).
 
-### 4. Захист даних
+- Збережений контейнер: <http://localhost:8086/catalog>.
+- Повторний запуск native із порожньої теки: `python3 scripts/run_isolated.py`,
+  після чого <http://localhost:8087/catalog>.
+- Зупинка тестового контейнера: `docker stop libratrack10-isolated`.
 
-- bcrypt `DefaultCost=10`; пароль має мінімум 12 символів і максимум 72 UTF-8 байти.
-- `RegisterRequest` / `UpdateProfileRequest` не містять внутрішніх полів; зайві JSON-поля відхиляються.
-- `PasswordHash` має `json:"-"`; список користувачів не вибирає hash із БД.
-- Невідомий email і неправильний пароль: однаковий 401 з `invalid credentials`.
-- Для відсутнього облікового запису виконується dummy bcrypt comparison.
-- HS256 JWT містить `user_id`, `role`, `exp` на 24 години та `iat`; перевірка вимагає `exp` і дозволяє лише HS256.
-- Перевіряються поточний користувач і роль із БД: старий токен після зміни ролі не приймається.
-- `/me/loans` використовує ID із перевіреного токена; довільний `user_id` filter не дозволено.
-- Логи пропускають bodies/headers/query strings; SQL-параметри приховані; auth-відповіді мають `Cache-Control: no-store`.
-- Auth endpoints обмежено до 20 запитів/хвилину на IP; довільні forwarded headers не вважаються довіреними.
-- CORS дозволяє лише `ALLOWED_ORIGIN`, з `Authorization` у preflight.
+Вбудовано HTML, CSS, JavaScript і SQL. PostgreSQL та конфігурація/секрети
+залишаються зовнішніми; бінарник має відповідати ОС та архітектурі.
+`MIGRATIONS_PATH` за замовчуванням порожній і означає вбудовані міграції.
+Для розробки можна явно вказати зовнішній шлях. Секрети не вбудовуються.
+Звичайний multi-stage образ збирається через `docker build -t libratrack10 .`.
 
-### 5. Аудит та перевірки
-
-[security_audit.md](security_audit.md) містить знахідки, severity, точні рядки,
-triage та перевірки. Приклади тестів LMS адаптовано: тести викликають справжній
-router, handlers, middleware, bcrypt/JWT та PostgreSQL, без mock-auth.
+### 5. Перевірки
 
 ```bash
+go mod tidy
 go build ./...
 go vet ./...
-go test -v ./...
-go test -race -count=1 -coverpkg=./... -covermode=atomic -coverprofile=cover.out -json ./... > test-results.jsonl
+go test -race -count=1 -json ./... > test-results.jsonl
 python3 scripts/test_summary.py test-results.jsonl
-go tool cover -func=cover.out
-go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+python3 scripts/verify_isolation.py --keep-container
 ```
 
-Тести використовують лише БД із суфіксом `_test`, окрему випадкову схему на тест
-і перевіряють rollback/up, конкурентні операції та успадковану оптимізацію N+1.
-Пропущені тести через відсутню БД не є повною перевіркою; CI відхиляє skips.
-Фактичні результати поточної перевірки збережено в `evidence/verification.txt`.
-Workflow: `.github/workflows/security-check.yml`.
-
-Swagger оновлюється командою:
-
-```bash
-go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g cmd/api/main.go
-gofmt -w docs
-```
-
-### 6. Докази для здачі
-
-Для здачі додайте до LMS документ зі скриншотами запуску й перевірок API та
-посилання на репозиторій із відповідною гілкою. Робоча гілка — `develop`.
+Тести використовують `libratrack10_test` і випадкову окрему схему для кожної
+перевірки. Вони охоплюють успадкований API/RBAC/міграції та нові сценарії:
+повний HTML, HTMX-фрагменти, CRUD, 403, cookies, CSRF, XSS, пошук, доступність
+і вбудовані міграції з порожньої робочої теки. Пропуски через відсутню БД
+не вважаються повною перевіркою. Результати поточного запуску наведено в
+[evidence/verification.txt](evidence/verification.txt).
 
 ---
 
 # 📚 LibraTrack — Library Management System
 
-**Go with GenAI, Lesson 9: Security First.** Extends completed Lesson 8
-(commit `d27b5b7`) with bcrypt, 24-hour HS256 JWTs, middleware RBAC, user roles,
-profile updates and transactional loans. Retains PostgreSQL, normalized catalog,
-GORM repositories, Swagger and the N+1 fix.
+**Lesson 10: Full Stack.** Builds on Lesson 9 (`ea8ccb6`) with server-rendered
+HTML, reusable layouts/partials, browser authentication, book CRUD, live HTMX
+search/deletion and embedded runtime assets. The existing REST API and Swagger
+remain available. Gin handlers reuse PostgreSQL/GORM repositories and shared
+credential validation.
 
 ## 🛠️ Quick Start
 
-Use Go **1.27.2**, Docker Desktop/Compose v2 and Python 3. Clone `develop`, run
-`python3 scripts/setup_env.py`, `docker compose up --wait postgres`, then
-`go run ./cmd/api`. Swagger: <http://localhost:8080/swagger/index.html>.
-API binds loopback; PostgreSQL uses localhost port **5439** and a separate volume.
-Setup creates distinct random database passwords and a JWT secret in ignored
-`.env` (0600). Existing environment values override `.env`.
+Use Go **1.27.2**, Docker Desktop/Compose v2 and Python 3. From the project root:
 
-## 📈 Lesson 9 Report
+```bash
+python3 scripts/setup_env.py
+docker compose up -d --wait postgres
+go run ./cmd/demo-users
+go run ./cmd/api
+```
 
-1. **Design and prompts:** see `security_design.txt` and `prompts.txt`. Public
-   registration assigns reader only. Authenticated readers see their own loans;
-   librarians/admins manage catalog and loans; admins alone manage users/roles.
-2. **Migrations:** `000001_init_schema` → `000002_normalize_books` →
-   `000003_add_auth_fields` → `000004_seed_demo_data` → `000005_loans`.
-   The seed was renumbered in this new repository to match the homework's auth
-   filename. Use a fresh Lesson 9 database, never the existing Lesson 8 database.
-   The inherited role column is preserved during auth rollback.
-3. **Authentication:** bcrypt DefaultCost 10; password length 12+ characters and
-   at most 72 UTF-8 bytes. Generic login failures, dummy comparison, DTO allow-lists,
-   hidden password hashes and parameterized queries. JWT_SECRET has no fallback;
-   verification pins HS256, requires expiration and checks current DB identity/role.
-4. **Authorization:** nested route groups execute authentication before RBAC.
-   Missing/invalid identity returns 401, disallowed role returns 403. All failures
-   abort the chain. The inherited router remains in internal/app, called by main.
-   Bootstrap a registered admin locally with `go run ./cmd/set-role -email
-   admin9@example.com -role admin`, then log in again. Subsequent changes use the
-   admin endpoint. Loans last 14 days; staff issue/return copies; no fines.
-5. **Review and tests:** `security_audit.md` records triaged findings and known
-   limitations. Adapted LMS scenarios exercise the real application/PostgreSQL,
-   including role boundaries, bad tokens, ownership, leakage, concurrent writes
-   and migration round trips. Use the validation commands above. Actual results
-   are in `evidence/verification.txt`; CI rejects failed or skipped tests.
-6. **Evidence:** submit a document with screenshots of the running application
-   and API checks, together with the repository and branch link, through the LMS.
+Open <http://localhost:8085/catalog>. Demo credentials are randomly generated
+in the ignored private `.demo-accounts.txt`; `.env` is generated separately.
+PostgreSQL uses localhost port **5440** and dedicated Lesson 10 databases/volume.
+Browser registration always assigns reader. Set `COOKIE_SECURE=true` for HTTPS.
+
+## 📈 Lesson 10 Report
+
+1. **Templates and architecture:** separate page template sets, shared layout and
+   row partials, `html/template` autoescaping, startup parsing and buffered
+   rendering. The books query with availability preserves four SELECTs for 10 and 15 books;
+   the full page also loads categories and the current user when signed in.
+2. **Interactivity:** 300 ms live title/ISBN search returns rows only; staff
+   deletion returns empty 200 after successful deletion. Errors preserve the row.
+   Ordinary forms support create/edit/delete without JavaScript. Search pagination
+   is available through the normal Search submit action.
+3. **Security:** JWT in HttpOnly/SameSite cookies, configurable Secure, signed
+   session-bound CSRF, current database identity/role checks, local scripts and
+   restrictive CSP. Web management denial is 403; API keeps its existing 401/403.
+   Logout clears cookies without revoking already copied tokens.
+4. **Single binary:** HTML, CSS, HTMX, app.js and SQL migrations use embed.FS.
+   Native empty-directory and Linux scratch/non-root/read-only/no-mount checks
+   are reproducible with `python3 scripts/verify_isolation.py --keep-container`.
+   PostgreSQL and environment secrets remain external.
+5. **Validation:** inherited and new real-router/PostgreSQL tests, race detector,
+   migration round trips, RBAC, XSS, cookies and CSRF. Actual results are recorded
+   in `evidence/verification.txt` and `evidence/isolation.json`.
+6. **Deliverables:** `prompts.txt`, `design_v10.txt`, source and local verification
+   evidence. On 19 October 2026, the student personally confirmed the Task 1.1
+   template/renderer audit without findings and captured the execution screenshots.

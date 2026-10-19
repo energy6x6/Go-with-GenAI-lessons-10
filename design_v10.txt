@@ -1,0 +1,56 @@
+LibraTrack — Lesson 10 architecture and security review
+
+Architecture
+Gin serves the existing /api/v1 JSON API and a new HTML web layer. Both reuse the
+same repositories, database constraints and credential verifier. API clients keep
+Bearer authorization; browser login stores the JWT in an HttpOnly cookie.
+Web handlers are in internal/handler/web. Assets are in web/templates and
+web/static. Each page combines a shared layout/partials with its own content
+block. Templates are parsed once at startup; rendering is buffered before a
+response is committed. Search returns rows, while /catalog returns a document.
+Availability counts are joined in the books query; preloaded relations retain a
+constant number of SELECT statements rather than per-book HTTP/SQL requests.
+
+JWT storage decision
+localStorage is readable by page JavaScript. An XSS payload could read and
+exfiltrate a JWT stored there. HttpOnly prevents JavaScript from reading the
+session cookie. This does not prevent XSS from acting through the victim's
+browser, so contextual escaping remains necessary. Cookie authentication also
+requires CSRF protection because browsers attach cookies automatically.
+
+Cookie and CSRF policy
+Session and CSRF cookies use Path=/, HttpOnly, SameSite=Lax and a 24-hour maximum
+age. COOKIE_SECURE=true enables HTTPS-only cookies; false is for local HTTP.
+CSRF uses a random nonce authenticated with a server-generated HMAC key and
+bound to the exact JWT session value. Hidden fields and X-CSRF-Token carry the
+value. Missing, tampered or cross-session values yield 403 on unsafe methods,
+including login/logout and registration. Login/logout rotate the CSRF cookie.
+The HMAC key is process-local; restarting the server requires reloading forms.
+Role checks use the current database identity. Both librarian and admin manage
+books. Public and reader writes return 403 on web routes as required by Task
+3.2. The existing API keeps 401 for missing identity and 403 for disallowed roles.
+Logout removes browser cookies; it does not revoke a previously copied JWT,
+which remains subject to expiration and current-user/role checks.
+
+Automated template audit
+HTML is rendered with html/template only. No template.HTML conversion is used
+for request or database data. Templates contain trusted application markup and
+escaped values; user input is not interpreted as template source. Error text is
+generic and does not expose SQL, secrets or database connection strings.
+A restrictive self-only Content-Security-Policy and local scripts are used.
+Integration tests submit script/image payloads and verify escaped output.
+
+Single binary
+web/templates.go embeds templates. web/static.go embeds local CSS, HTMX and app
+JavaScript, served through fs.Sub. migrations/embed.go embeds all versioned SQL;
+the API defaults to these migrations. MIGRATIONS_PATH is an optional explicit
+external override for development. PostgreSQL and secret configuration remain
+external. A binary targets one OS/architecture. Linux builds use CGO_ENABLED=0
+and can run as a non-root user in scratch with a read-only filesystem.
+
+Manual Task 1.1 — confirmed by the student on 19 October 2026
+The student personally inspected all project-owned HTML templates and Go
+renderers, confirmed html/template usage and the absence of inappropriate
+template.HTML conversions, and reported no findings. The student's browser
+screenshot shows the XSS example rendered as literal text in the catalog.
+This manual confirmation is separate from the automated checks above.
